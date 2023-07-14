@@ -1,0 +1,5 @@
+.env
+echo
+nvim.appimage
+target
+.idea
