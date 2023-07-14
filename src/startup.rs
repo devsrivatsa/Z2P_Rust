@@ -25,5 +25,4 @@ pub fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, std::io::Er
         .run();
     Ok(server)
 }
-//maaooo
 // "127.0.0.1:8000"

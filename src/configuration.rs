@@ -39,5 +39,3 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
     //try to convert the configuration values it reads into our settings type
     settings.try_deserialize::<Settings>()
 }
-
-//maaooo
