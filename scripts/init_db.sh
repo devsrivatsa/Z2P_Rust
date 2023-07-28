@@ -52,15 +52,16 @@ until psql -h "${DB_HOST}" -U "${DB_USER}" -p "${DB_PORT}" -d "postgres" -c '\q'
 	sleep 3
 done
 
->& echo "postgres is up and running on port ${DB_PORT} - running migrations now.."
+echo >&2 "postgres is up and running on port ${DB_PORT} - running migrations now.."
 
 DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
 export DATABASE_URL
 sqlx database create
-sqlx migrate run
-
->&2 echo "Postgres has been migrated. Ready to go!"
 
 #Adding a Migration
+#sqlx migrate add create_subscription_table # we only need this if there is no file inside migrations folder
 
-#sqlx migrate add create_subscription_table
+sqlx migrate run
+
+echo >&2 "Postgres has been migrated. Ready to go!"
+
