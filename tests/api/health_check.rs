@@ -1,11 +1,12 @@
-use z2p::startup::run;
-use std::net::TcpListener;
-use sqlx::{Connection, Executor, PgConnection, PgPool};
-use z2p::configuration::{get_configuration, DatabaseSettings};
-use z2p::telemetry::{ get_subscriber, init_subscriber };
-use uuid::Uuid;
 use once_cell::sync::Lazy;
 use secrecy::ExposeSecret;
+use sqlx::{Connection, Executor, PgConnection, PgPool};
+use std::net::TcpListener;
+use uuid::Uuid;
+use z2p::configuration::{get_configuration, DatabaseSettings};
+use z2p::email_client::EmailClient;
+use z2p::startup::run;
+use z2p::telemetry::{get_subscriber, init_subscriber};
 
 //ensure that the tracing stack is initialized only once using once_cell
 static TRACING: Lazy<()> = Lazy::new(|| {
@@ -14,15 +15,17 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     let mut subscriber;
     if std::env::var("TEST_LOG").is_ok() {
         subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+        init_subscriber(subscriber);
     } else {
+        // subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::Sink);
         subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
-    }
-    init_subscriber(subscriber);
+        init_subscriber(subscriber);
+    };
 });
 
 pub struct TestApp {
     pub address: String,
-    pub db_pool: PgPool
+    pub db_pool: PgPool,
 }
 
 async fn spawn_app() -> TestApp {
@@ -37,24 +40,32 @@ async fn spawn_app() -> TestApp {
     //we are creating a new logical db everytime and then rolling it back
     let mut configuration = get_configuration().expect("Failed to read configuration");
     configuration.database.database_name = Uuid::new_v4().to_string(); //modify the db name to random string
+
     let connection_pool = configure_database(&configuration.database).await;
 
-    let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
+    let sender_email = configuration
+        .email_client
+        .sender()
+        .expect("Invalid sender email address in test");
+    let email_client = EmailClient::new(configuration.email_client.base_url, sender_email, configuration.email_client.authorization_token);
+
+    let server = run(listener, connection_pool.clone(), email_client).expect("Failed to bind address");
 
     let _ = tokio::spawn(server); //task to spawn an async function. in this case - the server
     TestApp {
         address,
-        db_pool: connection_pool
+        db_pool: connection_pool,
     }
     //yet to add code to rollback
 }
 //we want this so that we are able to create dummy databases to run tests
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     //establish connection
-    let mut connection = PgConnection::connect(
-        &config.connection_string_without_db().expose_secret()
-    ).await.expect("Failed to create database"); //create connection string without dummy database name
-    //creating db
+    let mut connection =
+        PgConnection::connect(&config.connection_string_without_db().expose_secret())
+            .await
+            .expect("Failed to create database"); //create connection string without dummy database name
+                                                  //creating db
     connection
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
@@ -87,7 +98,34 @@ async fn health_check_works() {
     assert!(response.status().is_success());
     assert_eq!(Some(0), response.content_length());
 }
-
+#[tokio::test]
+async fn subscribe_returns_a400_on_for_invalid_fields() {
+    //arrange
+    let app = spawn_app().await;
+    let client = reqwest::Client::new();
+    let test_cases = vec![
+        ("name=&email=ursula_le_guin%40gmail.com", "empty name"),
+        ("name=Ursula&email=", "empty email"),
+        ("name=Ursula&email=definitely-not-an-email", "invalid email")
+    ];
+    for (body,desc) in test_cases {
+        //act
+        let response = client
+            .post(&format!("{}/subscriptions", &app.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .expect("Failed to execute request");
+        //assert
+        assert_eq!(
+            400,
+            response.status().as_u16(),
+            "The API did not return a 400 BAD REQUEST when the payload was {}.",
+            desc
+        )
+    }
+}
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     let app = spawn_app().await;
@@ -110,14 +148,14 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     assert_eq!(saved.email, "ursula_le_guin@gmail.com");
     assert_eq!(saved.name, "le guin");
 }
-
+#[tokio::test]
 async fn subscribe_returns_a_400_when_data_is_missing() {
     let app = spawn_app().await;
     let client = reqwest::Client::new();
     let test_cases = vec![
         ("name=le20%guin", "missing the email"),
         ("email=ursula_le_guin%40gmail.com", "missing the name"),
-        ("", "missing both name and email")
+        ("", "missing both name and email"),
     ];
     for (invalid_body, error_msg) in test_cases {
         let response = client
@@ -135,9 +173,5 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
             error_msg
         );
     }
-
 }
 //maaooo
-
-
-

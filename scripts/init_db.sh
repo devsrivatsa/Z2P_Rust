@@ -1,5 +1,5 @@
 set -x
-set -eo pipefail
+set -e pipefail
 
 #check if psql and sqlx-cli are installed first
 if ! [ -x "$(command -v psql)" ]; then
