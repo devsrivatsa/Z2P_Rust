@@ -68,7 +68,7 @@ pub async fn spawn_app() -> TestApp {
 async fn configure_database(config: &DatabaseSettings) -> PgPool {
     //establish connection
     let mut connection =
-        PgConnection::connect(&config.connection_string_without_db().expose_secret())
+        PgConnection::connect_with(&config.without_db())
             .await
             .expect("Failed to create database"); //create connection string without dummy database name
     //creating db
@@ -76,8 +76,8 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to create database");
-    //migrate db
-    let connection_pool = PgPool::connect(&config.connection_string().expose_secret())
+    //migrate db --------------------------------------------------------------------this is causing error----------------------
+    let connection_pool = PgPool::connect_with(config.without_db().clone())
         .await
         .expect("Failed to connect to postgres");
     sqlx::migrate!("./migrations")

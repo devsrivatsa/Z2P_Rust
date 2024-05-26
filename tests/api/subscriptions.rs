@@ -15,7 +15,7 @@ async fn subscribe_returns_a400_on_for_invalid_fields() {
         //assert
         assert_eq!(
             400,
-            response.status().as_u16(),
+            response.await.status().as_u16(),
             "The API did not return a 400 BAD REQUEST when the payload was {}.",
             desc
         )
@@ -28,7 +28,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
     let response = app.post_subscriptions(body.to_string());
 
-    assert_eq!(200, response.status().as_u16());
+    assert_eq!(200, response.await.status().as_u16());
     let saved = sqlx::query!("SELECT email, name FROM subscriptions")
         .fetch_one(&app.db_pool)
         .await
@@ -48,7 +48,7 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
         let response = app.post_subscriptions(invalid_body.into());
         assert_eq!(
             400,
-            response.status().as_u16(),
+            response.await.status().as_u16(),
             "The api did not fail with 400 bad request when the payload was {}",
             error_msg
         );
