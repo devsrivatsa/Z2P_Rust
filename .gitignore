@@ -3,3 +3,5 @@ echo
 nvim.appimage
 target
 .idea
+/migrations
+/configuration

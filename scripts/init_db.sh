@@ -1,5 +1,5 @@
 set -x
-set -e pipefail
+set -e -o pipefail
 
 #check if psql and sqlx-cli are installed first
 if ! [ -x "$(command -v psql)" ]; then
@@ -57,7 +57,7 @@ echo >&2 "postgres is up and running on port ${DB_PORT} - running migrations now
 DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
 export DATABASE_URL
 sqlx database create
-
+echo >&2 "dababase has been created successfully!"
 #Adding a Migration
 #sqlx migrate add create_subscription_table # we only need this if there is no file inside migrations folder
 
